@@ -230,6 +230,14 @@ class DriveFileManager @Inject constructor(
         onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> }
     ) {
         val metadata = fetchMetadata(fileId)
+        val mimeType = metadata.mimeType
+        
+        // Check if this is a Google Docs/Sheets/Slides file that needs export
+        if (mimeType?.startsWith("application/vnd.google-apps.") == true) {
+            exportGoogleDocsFile(fileId, mimeType, destinationUri, onProgress)
+            return
+        }
+        
         val expectedSize = metadata.size ?: -1
         val rangeHeader = if (resumeFromBytes > 0) "bytes=$resumeFromBytes-" else null
 
@@ -251,6 +259,51 @@ class DriveFileManager @Inject constructor(
         val body = response.body() ?: throw DriveApiException("Empty download body")
         writeResponseBody(destinationUri, body, resumeFromBytes, expectedSize, onProgress)
         verifyChecksumIfAvailable(destinationUri, metadata.md5Checksum)
+    }
+    
+    /**
+     * Export Google Docs/Sheets/Slides files to a downloadable format.
+     * These files can't be downloaded directly - they must be exported.
+     */
+    private suspend fun exportGoogleDocsFile(
+        fileId: String,
+        googleMimeType: String,
+        destinationUri: Uri,
+        onProgress: (downloaded: Long, total: Long) -> Unit
+    ) {
+        // Map Google Docs MIME types to export formats
+        val exportMimeType = when (googleMimeType) {
+            "application/vnd.google-apps.document" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document" // .docx
+            "application/vnd.google-apps.spreadsheet" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" // .xlsx
+            "application/vnd.google-apps.presentation" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation" // .pptx
+            "application/vnd.google-apps.drawing" -> "image/png"
+            "application/vnd.google-apps.script" -> "application/vnd.google-apps.script+json"
+            else -> {
+                // For unsupported Google apps types (like Forms, Sites), skip
+                android.util.Log.w("DriveFileManager", "Unsupported Google app type for export: $googleMimeType")
+                throw DriveApiException("Cannot export file type: $googleMimeType", 400, null)
+            }
+        }
+        
+        android.util.Log.d("DriveFileManager", "Exporting Google file $fileId from $googleMimeType to $exportMimeType")
+        
+        val response = rateLimiter.runWithBackoff("exportFile") {
+            val resp = driveApiService.exportFile(fileId, exportMimeType)
+            if (resp.code() == 429 || resp.code() == 503) {
+                throw RateLimitException("Rate limited while exporting")
+            }
+            if (!resp.isSuccessful) {
+                throw DriveApiException(
+                    "Export failed",
+                    resp.code(),
+                    resp.errorBody()?.string()
+                )
+            }
+            resp
+        }
+        
+        val body = response.body() ?: throw DriveApiException("Empty export body")
+        writeResponseBody(destinationUri, body, 0, -1, onProgress)
     }
 
     suspend fun updateFile(

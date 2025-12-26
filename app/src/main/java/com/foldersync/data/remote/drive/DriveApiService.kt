@@ -81,4 +81,15 @@ interface DriveApiService {
     suspend fun deleteFile(
         @retrofit2.http.Path("fileId") fileId: String
     ): Response<Unit>
+
+    /**
+     * Export Google Docs/Sheets/Slides files to a downloadable format.
+     * Use this for files with MIME types like application/vnd.google-apps.*
+     */
+    @Streaming
+    @GET("files/{fileId}/export")
+    suspend fun exportFile(
+        @retrofit2.http.Path("fileId") fileId: String,
+        @Query("mimeType") mimeType: String
+    ): Response<ResponseBody>
 }

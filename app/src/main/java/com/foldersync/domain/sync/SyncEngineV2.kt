@@ -436,16 +436,45 @@ class SyncEngineV2 @Inject constructor(
             localFolderUri
         }
 
+        // Handle Google Docs files - need different filename and mimeType for export
+        val (fileName, mimeType) = getLocalFileNameAndMimeType(driveFile.name, driveFile.mimeType)
+
         val localUri = fileSystemManager.createFile(
             parentUri = targetFolderUri,
-            fileName = driveFile.name,
-            mimeType = driveFile.mimeType
-        ) ?: throw IOException("Failed to create local file: ${driveFile.name}")
+            fileName = fileName,
+            mimeType = mimeType
+        ) ?: throw IOException("Failed to create local file: $fileName")
         
         driveFileManager.downloadFile(
             fileId = driveFile.id,
             destinationUri = localUri
         )
+    }
+    
+    /**
+     * Convert Google Docs file names and MIME types to local equivalents.
+     * Google Docs/Sheets/Slides don't have file extensions and need to be exported.
+     */
+    private fun getLocalFileNameAndMimeType(originalName: String, mimeType: String): Pair<String, String> {
+        return when (mimeType) {
+            "application/vnd.google-apps.document" -> {
+                val name = if (originalName.endsWith(".docx")) originalName else "$originalName.docx"
+                name to "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+            "application/vnd.google-apps.spreadsheet" -> {
+                val name = if (originalName.endsWith(".xlsx")) originalName else "$originalName.xlsx"
+                name to "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+            "application/vnd.google-apps.presentation" -> {
+                val name = if (originalName.endsWith(".pptx")) originalName else "$originalName.pptx"
+                name to "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            }
+            "application/vnd.google-apps.drawing" -> {
+                val name = if (originalName.endsWith(".png")) originalName else "$originalName.png"
+                name to "image/png"
+            }
+            else -> originalName to mimeType
+        }
     }
     
     private suspend fun applyConflictResolution(
