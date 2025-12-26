@@ -267,16 +267,27 @@ class SyncEngine @Inject constructor(
     
     private suspend fun listDriveFolder(folderId: String): List<DriveFile> = withContext(ioDispatcher) {
         val allFiles = mutableListOf<DriveFile>()
-        driveFileManager.listFiles(folderId).collect { files ->
-            allFiles.addAll(files)
+        driveFileManager.listFilesRecursive(folderId).collect { file ->
+            allFiles.add(file)
         }
         allFiles
     }
     
-    private suspend fun uploadFile(file: LocalFile, folderId: String) = withContext(ioDispatcher) {
+    private suspend fun uploadFile(file: LocalFile, rootFolderId: String) = withContext(ioDispatcher) {
+        // Parse relative path to get parent folder parts
+        val pathParts = file.relativePath.split("/")
+        val folderParts = pathParts.dropLast(1) // All parts except the filename
+
+        // Create folder structure on Drive if needed
+        val targetFolderId = if (folderParts.isNotEmpty()) {
+            driveFileManager.findOrCreateFolderPath(rootFolderId, folderParts)
+        } else {
+            rootFolderId
+        }
+
         driveFileManager.uploadFile(
             localUri = file.uri,
-            folderId = folderId
+            folderId = targetFolderId
         ) { uploaded, total ->
             val progress = if (total > 0) uploaded.toFloat() / total else 0f
             updateProgress(message = "Uploading ${file.name}: ${(progress * 100).toInt()}%")
@@ -284,9 +295,20 @@ class SyncEngine @Inject constructor(
     }
     
     private suspend fun downloadFile(driveFile: DriveFile, localFolderUri: Uri) = withContext(ioDispatcher) {
+        // Parse relative path to get parent folder parts
+        val pathParts = driveFile.relativePath.split("/")
+        val folderParts = pathParts.dropLast(1) // All parts except the filename
+
+        // Create local folder structure if needed
+        val targetFolderUri = if (folderParts.isNotEmpty()) {
+            fileSystemManager.findOrCreatePath(localFolderUri, folderParts)
+        } else {
+            localFolderUri
+        }
+
         // Create local file
         val localUri = fileSystemManager.createFile(
-            parentUri = localFolderUri,
+            parentUri = targetFolderUri,
             fileName = driveFile.name,
             mimeType = driveFile.mimeType
         ) ?: throw IOException("Failed to create local file: ${driveFile.name}")

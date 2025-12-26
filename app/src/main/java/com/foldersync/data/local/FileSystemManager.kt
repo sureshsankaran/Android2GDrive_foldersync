@@ -49,15 +49,29 @@ class FileSystemManager @Inject constructor(
 
     fun scanFolder(uri: Uri): Flow<LocalFile> = flow {
         val root = DocumentFile.fromTreeUri(context, uri) ?: return@flow
-        suspend fun traverse(documentFile: DocumentFile) {
-            emit(buildLocalFile(documentFile))
+        val rootName = root.name ?: ""
+        
+        suspend fun traverse(documentFile: DocumentFile, parentPath: String) {
+            val relativePath = if (parentPath.isEmpty()) {
+                documentFile.name ?: ""
+            } else {
+                "$parentPath/${documentFile.name ?: ""}"
+            }
+            emit(buildLocalFile(documentFile, relativePath))
             if (documentFile.isDirectory) {
                 for (child in documentFile.listFiles()) {
-                    traverse(child)
+                    traverse(child, relativePath)
                 }
             }
         }
-        traverse(root)
+        
+        // Emit root folder
+        emit(buildLocalFile(root, ""))
+        
+        // Traverse children
+        for (child in root.listFiles()) {
+            traverse(child, "")
+        }
     }.flowOn(Dispatchers.IO)
 
     fun getFileMetadata(uri: Uri): LocalFile {
@@ -94,7 +108,7 @@ class FileSystemManager @Inject constructor(
         return parent.createFile(mimeType, fileName)?.uri
     }
 
-    private fun buildLocalFile(documentFile: DocumentFile): LocalFile {
+    private fun buildLocalFile(documentFile: DocumentFile, relativePath: String = ""): LocalFile {
         val isDirectory = documentFile.isDirectory
         val mimeType = if (isDirectory) {
             DocumentsContract.Document.MIME_TYPE_DIR
@@ -110,11 +124,33 @@ class FileSystemManager @Inject constructor(
             uri = documentFile.uri,
             name = documentFile.name.orEmpty(),
             path = documentFile.uri.path ?: documentFile.uri.toString(),
+            relativePath = relativePath,
             size = documentFile.length(),
             mimeType = mimeType,
             isDirectory = isDirectory,
             lastModified = documentFile.lastModified(),
             checksum = checksum
         )
+    }
+    
+    fun createFolder(parentUri: Uri, folderName: String): Uri? {
+        val parent = DocumentFile.fromTreeUri(context, parentUri)
+            ?: DocumentFile.fromSingleUri(context, parentUri)
+            ?: return null
+        return parent.createDirectory(folderName)?.uri
+    }
+    
+    fun findOrCreatePath(rootUri: Uri, relativePath: String): Uri? {
+        if (relativePath.isEmpty()) return rootUri
+        
+        var current = DocumentFile.fromTreeUri(context, rootUri) ?: return null
+        val parts = relativePath.split("/").filter { it.isNotEmpty() }
+        
+        for (part in parts.dropLast(1)) { // Navigate/create folders, exclude the file name
+            val existing = current.listFiles().find { it.name == part && it.isDirectory }
+            current = existing ?: (current.createDirectory(part) ?: return null)
+        }
+        
+        return current.uri
     }
 }

@@ -90,6 +90,116 @@ class DriveFileManager @Inject constructor(
         } while (pageToken != null)
     }
 
+    /**
+     * Recursively list all files and folders within a Drive folder.
+     * Emits files with their relative path from the root folder.
+     */
+    suspend fun listFilesRecursive(
+        folderId: String,
+        parentPath: String = ""
+    ): Flow<DriveFile> = flow {
+        val queryParts = mutableListOf<String>()
+        queryParts.add("'$folderId' in parents")
+        queryParts.add("trashed = false")
+        val query = queryParts.joinToString(" and ")
+
+        var pageToken: String? = null
+        val folders = mutableListOf<Pair<String, String>>() // (folderId, relativePath)
+
+        do {
+            val response = rateLimiter.runWithBackoff("listFilesRecursive") {
+                val resp = driveApiService.listFiles(
+                    query = query,
+                    fields = FILE_LIST_FIELDS,
+                    pageToken = pageToken,
+                    pageSize = 200
+                )
+                if (resp.code() == 429 || resp.code() == 503) {
+                    throw RateLimitException("Rate limited while listing files")
+                }
+                resp
+            }
+            if (!response.isSuccessful) {
+                throw DriveApiException(
+                    "Failed to list files recursively",
+                    response.code(),
+                    response.errorBody()?.string()
+                )
+            }
+            val body = response.body() ?: throw DriveApiException(
+                "Empty response from Drive",
+                response.code(),
+                response.errorBody()?.string()
+            )
+
+            for (dto in body.files) {
+                val relativePath = if (parentPath.isEmpty()) {
+                    dto.name
+                } else {
+                    "$parentPath/${dto.name}"
+                }
+
+                emit(dto.toDomain(relativePath))
+
+                // Collect subfolders to recurse into
+                if (dto.mimeType == "application/vnd.google-apps.folder") {
+                    folders.add(dto.id to relativePath)
+                }
+            }
+            pageToken = body.nextPageToken
+        } while (pageToken != null)
+
+        // Recurse into subfolders
+        for ((subFolderId, subFolderPath) in folders) {
+            listFilesRecursive(subFolderId, subFolderPath).collect { file ->
+                emit(file)
+            }
+        }
+    }
+
+    /**
+     * Find or create a folder path on Drive.
+     * Returns the ID of the deepest folder.
+     *
+     * @param parentId The parent folder ID to start from
+     * @param pathParts List of folder names to create (e.g., ["folder1", "folder2"])
+     * @return The ID of the final folder in the path
+     */
+    suspend fun findOrCreateFolderPath(parentId: String, pathParts: List<String>): String {
+        if (pathParts.isEmpty()) return parentId
+
+        var currentParentId = parentId
+        for (folderName in pathParts) {
+            currentParentId = findOrCreateFolder(currentParentId, folderName)
+        }
+        return currentParentId
+    }
+
+    /**
+     * Find a folder by name within a parent, or create it if it doesn't exist.
+     */
+    private suspend fun findOrCreateFolder(parentId: String, folderName: String): String {
+        // Search for existing folder
+        val query = "'$parentId' in parents and name = '$folderName' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        val response = driveApiService.listFiles(
+            query = query,
+            fields = FILE_LIST_FIELDS,
+            pageSize = 1
+        )
+
+        if (response.isSuccessful) {
+            val body = response.body()
+            val existingFolder = body?.files?.firstOrNull()
+            if (existingFolder != null) {
+                return existingFolder.id
+            }
+        }
+
+        // Create new folder
+        val newFolder = createFolder(folderName, parentId)
+        return newFolder.id
+    }
+
     suspend fun uploadFile(
         localUri: Uri,
         folderId: String,
@@ -472,7 +582,7 @@ class DriveFileManager @Inject constructor(
         md.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun DriveFileDto.toDomain(): DriveFile {
+    private fun DriveFileDto.toDomain(relativePath: String = ""): DriveFile {
         val epoch = modifiedTime?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
         return DriveFile(
             id = id,
@@ -482,7 +592,8 @@ class DriveFileManager @Inject constructor(
             size = size,
             md5Checksum = md5Checksum,
             parents = parents,
-            version = version
+            version = version,
+            relativePath = relativePath.ifEmpty { name }
         )
     }
 

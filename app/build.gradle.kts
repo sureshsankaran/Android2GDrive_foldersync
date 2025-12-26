@@ -5,8 +5,10 @@ plugins {
     kotlin("kapt")
 }
 
+import java.util.Properties
+
 // Load local.properties for sensitive config
-val localProperties = java.util.Properties()
+val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())

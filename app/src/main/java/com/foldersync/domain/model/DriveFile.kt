@@ -8,5 +8,10 @@ data class DriveFile(
     val size: Long?,
     val md5Checksum: String?,
     val parents: List<String>?,
-    val version: Long?
-)
+    val version: Long?,
+    /** Relative path from sync root folder (e.g., "subfolder/file.txt") */
+    val relativePath: String = ""
+) {
+    val isFolder: Boolean
+        get() = mimeType == "application/vnd.google-apps.folder"
+}

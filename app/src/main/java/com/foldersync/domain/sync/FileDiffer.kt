@@ -86,13 +86,13 @@ class FileDiffer @Inject constructor() {
     private fun buildLocalFileMap(files: List<LocalFile>): Map<String, LocalFile> {
         return files
             .filter { !it.isDirectory }
-            .associateBy { it.name.lowercase() }
+            .associateBy { it.relativePath.lowercase() }
     }
     
     private fun buildDriveFileMap(files: List<DriveFile>): Map<String, DriveFile> {
         return files
-            .filter { it.mimeType != "application/vnd.google-apps.folder" }
-            .associateBy { it.name.lowercase() }
+            .filter { !it.isFolder }
+            .associateBy { it.relativePath.lowercase() }
     }
     
     private fun compareFiles(local: LocalFile, drive: DriveFile): FileComparison {
