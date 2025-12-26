@@ -181,8 +181,8 @@ private fun SyncIntervalSetting(
     currentInterval: Int,
     onIntervalSelected: (Int) -> Unit
 ) {
-    val intervals = listOf(15, 30, 60, 120, 360, 720, 1440)
-    val labels = listOf("15 min", "30 min", "1 hour", "2 hours", "6 hours", "12 hours", "24 hours")
+    val intervals = listOf(1, 5, 15, 30, 60, 120, 360, 720, 1440)
+    val labels = listOf("1 min (debug)", "5 min (debug)", "15 min", "30 min", "1 hour", "2 hours", "6 hours", "12 hours", "24 hours")
     
     Column(
         modifier = Modifier

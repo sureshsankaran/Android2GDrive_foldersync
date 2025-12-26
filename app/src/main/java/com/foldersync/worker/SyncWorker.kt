@@ -5,9 +5,14 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import androidx.hilt.work.HiltWorker
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.foldersync.data.local.PreferencesManager
 import com.foldersync.domain.sync.SyncEngineV2
@@ -15,6 +20,7 @@ import com.foldersync.domain.sync.SyncState
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
+import java.util.concurrent.TimeUnit
 
 /**
  * Background worker for folder synchronization using WorkManager
@@ -33,9 +39,13 @@ class SyncWorker @AssistedInject constructor(
         const val KEY_DRIVE_FOLDER_ID = "drive_folder_id"
         const val KEY_CONFLICT_STRATEGY = "conflict_strategy"
         const val KEY_IS_MANUAL = "is_manual"
+        const val KEY_DEBUG_INTERVAL_MINUTES = "debug_interval_minutes"
+        const val KEY_REQUIRES_WIFI = "requires_wifi"
+        const val KEY_REQUIRES_CHARGING = "requires_charging"
         
         const val WORK_NAME_PERIODIC = "periodic_sync"
         const val WORK_NAME_MANUAL = "manual_sync"
+        const val WORK_NAME_DEBUG_SYNC = "debug_periodic_sync"
         
         const val NOTIFICATION_ID = 1001
     }
@@ -83,17 +93,56 @@ class SyncWorker @AssistedInject constructor(
             if (syncResult.success) {
                 notificationHelper.showSyncComplete(filesProcessed)
                 preferencesManager.setLastSyncTime(System.currentTimeMillis())
+                scheduleNextDebugSyncIfNeeded()
                 Result.success(createSuccessData(filesProcessed))
             } else {
                 android.util.Log.e("SyncWorker", "Sync failed: ${syncResult.message}")
                 notificationHelper.showSyncError(syncResult.message ?: "Sync failed")
+                scheduleNextDebugSyncIfNeeded()
                 Result.failure(createErrorData(syncResult.message ?: "Sync failed"))
             }
         } catch (e: Exception) {
             android.util.Log.e("SyncWorker", "Sync exception: ${e.message}", e)
             notificationHelper.showSyncError(e.message ?: "Unknown error")
+            scheduleNextDebugSyncIfNeeded()
             Result.failure(createErrorData(e.message ?: "Unknown error"))
         }
+    }
+    
+    /**
+     * For debug mode (intervals < 15 min), schedule the next sync run.
+     * This simulates periodic behavior using chained OneTimeWorkRequests.
+     */
+    private fun scheduleNextDebugSyncIfNeeded() {
+        val debugInterval = inputData.getLong(KEY_DEBUG_INTERVAL_MINUTES, 0)
+        if (debugInterval <= 0 || debugInterval >= 15) return
+        
+        val requiresWifi = inputData.getBoolean(KEY_REQUIRES_WIFI, false)
+        val requiresCharging = inputData.getBoolean(KEY_REQUIRES_CHARGING, false)
+        
+        android.util.Log.d("SyncWorker", "DEBUG MODE: Scheduling next sync in $debugInterval minutes")
+        
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(
+                if (requiresWifi) NetworkType.UNMETERED else NetworkType.CONNECTED
+            )
+            .setRequiresCharging(requiresCharging)
+            .setRequiresBatteryNotLow(true)
+            .build()
+        
+        val nextSyncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints)
+            .setInputData(inputData) // Pass through all the same data
+            .setInitialDelay(debugInterval, TimeUnit.MINUTES)
+            .addTag("sync")
+            .addTag("debug_periodic")
+            .build()
+        
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            WORK_NAME_DEBUG_SYNC,
+            ExistingWorkPolicy.REPLACE,
+            nextSyncRequest
+        )
     }
 
     private fun createForegroundInfo(): ForegroundInfo {

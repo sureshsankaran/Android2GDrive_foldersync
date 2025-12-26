@@ -30,11 +30,13 @@ class SyncScheduler @Inject constructor(
 
     companion object {
         private const val DEFAULT_SYNC_INTERVAL_MINUTES = 60L
-        private const val MIN_SYNC_INTERVAL_MINUTES = 15L
+        private const val MIN_WORKMANAGER_INTERVAL_MINUTES = 15L
+        private const val WORK_NAME_DEBUG_SYNC = "debug_periodic_sync"
     }
 
     /**
-     * Schedule periodic sync with interval in MINUTES
+     * Schedule periodic sync with interval in MINUTES.
+     * For intervals < 15 minutes (debug mode), uses repeated OneTimeWork instead of PeriodicWork.
      */
     fun schedulePeriodicSync(
         localFolderUri: String,
@@ -57,14 +59,42 @@ class SyncScheduler @Inject constructor(
             .putString(SyncWorker.KEY_DRIVE_FOLDER_ID, driveFolderId)
             .putString(SyncWorker.KEY_CONFLICT_STRATEGY, conflictStrategy.name)
             .putBoolean(SyncWorker.KEY_IS_MANUAL, false)
+            .putLong(SyncWorker.KEY_DEBUG_INTERVAL_MINUTES, intervalMinutes) // For re-scheduling
+            .putBoolean(SyncWorker.KEY_REQUIRES_WIFI, requiresWifi)
+            .putBoolean(SyncWorker.KEY_REQUIRES_CHARGING, requiresCharging)
             .build()
 
-        // WorkManager minimum is 15 minutes
-        val effectiveInterval = intervalMinutes.coerceAtLeast(MIN_SYNC_INTERVAL_MINUTES)
-        android.util.Log.d("SyncScheduler", "Scheduling periodic sync every $effectiveInterval minutes (wifi=$requiresWifi, charging=$requiresCharging)")
+        // For short intervals (debug mode), use OneTimeWork with delay
+        if (intervalMinutes < MIN_WORKMANAGER_INTERVAL_MINUTES) {
+            android.util.Log.d("SyncScheduler", "DEBUG MODE: Scheduling sync every $intervalMinutes minutes using OneTimeWork")
+            
+            // Cancel any existing periodic work
+            workManager.cancelUniqueWork(SyncWorker.WORK_NAME_PERIODIC)
+            
+            val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraints)
+                .setInputData(inputData)
+                .setInitialDelay(intervalMinutes, TimeUnit.MINUTES)
+                .addTag("sync")
+                .addTag("debug_periodic")
+                .build()
+            
+            workManager.enqueueUniqueWork(
+                WORK_NAME_DEBUG_SYNC,
+                ExistingWorkPolicy.REPLACE,
+                syncRequest
+            )
+            android.util.Log.d("SyncScheduler", "Debug sync enqueued, will run in $intervalMinutes minutes")
+            return
+        }
+
+        // Cancel debug sync if switching to normal periodic
+        workManager.cancelUniqueWork(WORK_NAME_DEBUG_SYNC)
+        
+        android.util.Log.d("SyncScheduler", "Scheduling periodic sync every $intervalMinutes minutes (wifi=$requiresWifi, charging=$requiresCharging)")
         
         val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
-            effectiveInterval, TimeUnit.MINUTES,
+            intervalMinutes, TimeUnit.MINUTES,
             5, TimeUnit.MINUTES // Flex interval of 5 minutes
         )
             .setConstraints(constraints)
