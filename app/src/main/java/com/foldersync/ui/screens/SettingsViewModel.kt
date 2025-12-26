@@ -102,12 +102,24 @@ class SettingsViewModel @Inject constructor(
     }
 
     private suspend fun schedulePeriodicSync() {
-        val localUri = preferencesManager.getLocalFolderUriString().first() ?: return
-        val driveId = preferencesManager.getDriveFolderIdString().first() ?: return
+        val localUri = preferencesManager.getLocalFolderUriString().first()
+        if (localUri == null) {
+            android.util.Log.w("SettingsViewModel", "Cannot schedule periodic sync: local folder URI not configured")
+            return
+        }
+        
+        val driveId = preferencesManager.getDriveFolderIdString().first()
+        if (driveId == null) {
+            android.util.Log.w("SettingsViewModel", "Cannot schedule periodic sync: Drive folder ID not configured")
+            return
+        }
+        
         val interval = preferencesManager.syncIntervalMinutes.first()
         val wifi = preferencesManager.wifiOnly.first()
         val charging = preferencesManager.chargingOnly.first()
 
+        android.util.Log.d("SettingsViewModel", "Scheduling periodic sync: interval=${interval}min, wifi=$wifi, charging=$charging")
+        
         syncScheduler.schedulePeriodicSync(
             localFolderUri = localUri,
             driveFolderId = driveId,

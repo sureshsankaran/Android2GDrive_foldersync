@@ -16,6 +16,7 @@ enum class SyncStatus {
 
 enum class SyncAction {
     UPLOAD,
+    UPDATE,  // Update existing file (not create new)
     DOWNLOAD,
     DELETE_LOCAL,
     DELETE_DRIVE,

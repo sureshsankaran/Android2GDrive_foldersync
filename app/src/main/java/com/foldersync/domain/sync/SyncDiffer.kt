@@ -68,9 +68,18 @@ class SyncDiffer @Inject constructor() {
         }
     }
 
+    /**
+     * Item to upload - includes the local file and optional existing Drive file ID.
+     * If existingDriveFileId is set, we should UPDATE the existing file, not CREATE a new one.
+     */
+    data class UploadItem(
+        val localFile: LocalFile,
+        val existingDriveFileId: String? = null  // If set, update instead of create
+    )
+
     data class SyncPlan(
-        // Files/folders to upload (new or modified)
-        val toUpload: List<LocalFile> = emptyList(),
+        // Files/folders to upload (new or modified) - use UploadItem to distinguish create vs update
+        val toUpload: List<UploadItem> = emptyList(),
         // Files/folders to download (new or modified)
         val toDownload: List<DriveFile> = emptyList(),
         // Files/folders to delete locally (deleted on Drive)
@@ -141,7 +150,7 @@ class SyncDiffer @Inject constructor() {
         val trackedFolderMap = trackedMap.filterValues { it.isDirectory }
 
         // Results
-        val toUpload = mutableListOf<LocalFile>()
+        val toUpload = mutableListOf<UploadItem>()
         val toDownload = mutableListOf<DriveFile>()
         val toDeleteLocal = mutableListOf<SyncFileEntity>()
         val toDeleteDrive = mutableListOf<SyncFileEntity>()
@@ -170,7 +179,9 @@ class SyncDiffer @Inject constructor() {
                             unchanged.add(createTrackedEntry(local, drive))
                         }
                         FileState.LOCAL_NEWER -> {
-                            toUpload.add(local)
+                            // File exists on Drive, UPDATE it (don't create duplicate)
+                            android.util.Log.d("SyncDiffer", "Local newer, will UPDATE existing: $path (driveId=${drive.id})")
+                            toUpload.add(UploadItem(local, existingDriveFileId = drive.id))
                         }
                         FileState.REMOTE_NEWER -> {
                             toDownload.add(drive)
@@ -188,22 +199,22 @@ class SyncDiffer @Inject constructor() {
                         if (tracked.syncStatus == SyncStatus.PENDING_UPLOAD || 
                             tracked.syncStatus == SyncStatus.UPLOADING ||
                             tracked.syncStatus == SyncStatus.ERROR) {
-                            // Retry failed upload
-                            android.util.Log.d("SyncDiffer", "Retrying pending upload: $path")
-                            toUpload.add(local)
+                            // Retry failed upload - UPDATE existing file on Drive
+                            android.util.Log.d("SyncDiffer", "Retrying pending upload (update): $path")
+                            toUpload.add(UploadItem(local, existingDriveFileId = tracked.driveFileId))
                         } else {
                             // Was synced before, now gone from Drive → delete locally
                             android.util.Log.d("SyncDiffer", "File deleted on Drive, will delete locally: $path")
                             toDeleteLocal.add(tracked)
                         }
                     } else if (tracked != null && tracked.syncStatus == SyncStatus.PENDING_UPLOAD) {
-                        // Tracked but never got driveId - retry upload
-                        android.util.Log.d("SyncDiffer", "Retrying upload (no driveId yet): $path")
-                        toUpload.add(local)
+                        // Tracked but never got driveId - retry upload as NEW file
+                        android.util.Log.d("SyncDiffer", "Retrying upload (no driveId yet, create new): $path")
+                        toUpload.add(UploadItem(local))
                     } else {
                         // New local file → upload + add to DB
-                        android.util.Log.d("SyncDiffer", "New local file, will upload: $path")
-                        toUpload.add(local)
+                        android.util.Log.d("SyncDiffer", "New local file, will upload (create new): $path")
+                        toUpload.add(UploadItem(local))
                     }
                 }
 

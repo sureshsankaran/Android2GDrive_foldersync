@@ -61,7 +61,7 @@ class SyncScheduler @Inject constructor(
 
         // WorkManager minimum is 15 minutes
         val effectiveInterval = intervalMinutes.coerceAtLeast(MIN_SYNC_INTERVAL_MINUTES)
-        android.util.Log.d("SyncScheduler", "Scheduling periodic sync every $effectiveInterval minutes")
+        android.util.Log.d("SyncScheduler", "Scheduling periodic sync every $effectiveInterval minutes (wifi=$requiresWifi, charging=$requiresCharging)")
         
         val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
             effectiveInterval, TimeUnit.MINUTES,
@@ -82,6 +82,7 @@ class SyncScheduler @Inject constructor(
             ExistingPeriodicWorkPolicy.UPDATE,
             syncRequest
         )
+        android.util.Log.d("SyncScheduler", "Periodic sync enqueued with workName=${SyncWorker.WORK_NAME_PERIODIC}")
     }
 
     /**
@@ -99,6 +100,8 @@ class SyncScheduler @Inject constructor(
         driveFolderId: String? = null,
         conflictStrategy: ConflictResolutionStrategy = ConflictResolutionStrategy.KEEP_REMOTE
     ) {
+        android.util.Log.d("SyncScheduler", "triggerManualSync called")
+        
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -126,6 +129,7 @@ class SyncScheduler @Inject constructor(
             ExistingWorkPolicy.REPLACE,
             syncRequest
         )
+        android.util.Log.d("SyncScheduler", "Manual sync enqueued")
     }
 
     /**

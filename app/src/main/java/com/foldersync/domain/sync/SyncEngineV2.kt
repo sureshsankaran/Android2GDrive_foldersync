@@ -160,14 +160,17 @@ class SyncEngineV2 @Inject constructor(
                 }
             }
             
-            // 4.3: Upload files
-            for (file in plan.toUpload) {
+            // 4.3: Upload files (create new or update existing)
+            for (uploadItem in plan.toUpload) {
                 if (isCancelled) return cancelledResult()
+                
+                val file = uploadItem.localFile
+                val existingDriveFileId = uploadItem.existingDriveFileId
                 
                 // Mark as pending upload before starting
                 syncRepository.saveFile(SyncFileEntity(
                     localPath = file.relativePath,
-                    driveFileId = null,
+                    driveFileId = existingDriveFileId,  // Keep existing ID if updating
                     fileName = file.name,
                     isDirectory = false,
                     fileSize = file.size,
@@ -179,7 +182,15 @@ class SyncEngineV2 @Inject constructor(
                 ))
                 
                 try {
-                    val uploadedDriveFile = uploadFile(file, driveFolderId)
+                    val uploadedDriveFile = if (existingDriveFileId != null) {
+                        // UPDATE existing file on Drive (don't create duplicate)
+                        android.util.Log.d(TAG, "Updating existing file on Drive: ${file.relativePath} (id=$existingDriveFileId)")
+                        updateFile(existingDriveFileId, file)
+                    } else {
+                        // CREATE new file on Drive
+                        android.util.Log.d(TAG, "Creating new file on Drive: ${file.relativePath}")
+                        uploadFile(file, driveFolderId)
+                    }
                     uploadedCount++
                     updateProgress(processedFiles = uploadedCount + downloadedCount + deletedCount)
                     
@@ -199,7 +210,8 @@ class SyncEngineV2 @Inject constructor(
                         mimeType = file.mimeType
                     ))
                     
-                    logAction(SyncAction.UPLOAD, file.path, file.name, true)
+                    val actionType = if (existingDriveFileId != null) SyncAction.UPDATE else SyncAction.UPLOAD
+                    logAction(actionType, file.path, file.name, true)
                     android.util.Log.d(TAG, "Uploaded: ${file.relativePath}")
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "Failed to upload: ${file.relativePath}", e)
@@ -426,6 +438,20 @@ class SyncEngineV2 @Inject constructor(
         ) { uploaded, total ->
             val progress = if (total > 0) uploaded.toFloat() / total else 0f
             updateProgress(message = "Uploading ${file.name}: ${(progress * 100).toInt()}%")
+        }
+    }
+    
+    /**
+     * Update an existing file on Drive (instead of creating a new one which causes duplicates)
+     */
+    private suspend fun updateFile(driveFileId: String, file: LocalFile): DriveFile = withContext(ioDispatcher) {
+        driveFileManager.updateFile(
+            fileId = driveFileId,
+            localUri = file.uri,
+            newName = file.name
+        ) { uploaded, total ->
+            val progress = if (total > 0) uploaded.toFloat() / total else 0f
+            updateProgress(message = "Updating ${file.name}: ${(progress * 100).toInt()}%")
         }
     }
     

@@ -41,6 +41,8 @@ class SyncWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
+        android.util.Log.d("SyncWorker", "doWork() started - runAttemptCount=${runAttemptCount}")
+        
         val localFolderUri = inputData.getString(KEY_LOCAL_FOLDER_URI)
         val driveFolderId = inputData.getString(KEY_DRIVE_FOLDER_ID)
         @Suppress("UNUSED_VARIABLE")
@@ -51,11 +53,19 @@ class SyncWorker @AssistedInject constructor(
         // Try to get from preferences if not provided in input
         val effectiveLocalUri = localFolderUri 
             ?: preferencesManager.getLocalFolderUriString().first()
-            ?: return Result.failure(createErrorData("No local folder configured"))
+            ?: run {
+                android.util.Log.e("SyncWorker", "No local folder configured - failing")
+                return Result.failure(createErrorData("No local folder configured"))
+            }
         
         val effectiveDriveId = driveFolderId 
             ?: preferencesManager.getDriveFolderIdString().first()
-            ?: return Result.failure(createErrorData("No Drive folder configured"))
+            ?: run {
+                android.util.Log.e("SyncWorker", "No Drive folder configured - failing")
+                return Result.failure(createErrorData("No Drive folder configured"))
+            }
+
+        android.util.Log.d("SyncWorker", "Starting sync: localUri=$effectiveLocalUri, driveId=$effectiveDriveId")
 
         // Set foreground for long-running work with notification
         setForeground(createForegroundInfo())
@@ -68,16 +78,19 @@ class SyncWorker @AssistedInject constructor(
             )
             
             val filesProcessed = syncResult.filesUploaded + syncResult.filesDownloaded
+            android.util.Log.d("SyncWorker", "Sync completed: success=${syncResult.success}, uploaded=${syncResult.filesUploaded}, downloaded=${syncResult.filesDownloaded}")
 
             if (syncResult.success) {
                 notificationHelper.showSyncComplete(filesProcessed)
                 preferencesManager.setLastSyncTime(System.currentTimeMillis())
                 Result.success(createSuccessData(filesProcessed))
             } else {
+                android.util.Log.e("SyncWorker", "Sync failed: ${syncResult.message}")
                 notificationHelper.showSyncError(syncResult.message ?: "Sync failed")
                 Result.failure(createErrorData(syncResult.message ?: "Sync failed"))
             }
         } catch (e: Exception) {
+            android.util.Log.e("SyncWorker", "Sync exception: ${e.message}", e)
             notificationHelper.showSyncError(e.message ?: "Unknown error")
             Result.failure(createErrorData(e.message ?: "Unknown error"))
         }

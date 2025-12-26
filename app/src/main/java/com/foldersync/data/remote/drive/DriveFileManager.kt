@@ -362,6 +362,17 @@ class DriveFileManager @Inject constructor(
                 fields = METADATA_FIELDS
             )
             if (!update.isSuccessful) {
+                // 404 means file already deleted - treat as success
+                if (update.code() == 404) {
+                    android.util.Log.d("DriveFileManager", "File $fileId already deleted (404), treating as success")
+                    return
+                }
+                // 403 means no permission to delete (file uploaded by different app) - treat as success
+                // and let the caller remove from local tracking
+                if (update.code() == 403) {
+                    android.util.Log.w("DriveFileManager", "No permission to delete file $fileId (403), skipping - file may have been uploaded by another app")
+                    return
+                }
                 throw DriveApiException(
                     "Failed to move file to trash",
                     update.code(),
@@ -374,6 +385,16 @@ class DriveFileManager @Inject constructor(
         val response = driveApiService.deleteFile(fileId)
         if (response.code() == 429 || response.code() == 503) {
             throw RateLimitException("Rate limited while deleting file")
+        }
+        // 404 means file already deleted - treat as success
+        if (response.code() == 404) {
+            android.util.Log.d("DriveFileManager", "File $fileId already deleted (404), treating as success")
+            return
+        }
+        // 403 means no permission to delete - treat as success
+        if (response.code() == 403) {
+            android.util.Log.w("DriveFileManager", "No permission to delete file $fileId (403), skipping")
+            return
         }
         if (!response.isSuccessful) {
             throw DriveApiException(
