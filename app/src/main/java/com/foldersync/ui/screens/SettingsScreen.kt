@@ -1,5 +1,6 @@
 package com.foldersync.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -205,6 +206,7 @@ private fun SyncIntervalSetting(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { onIntervalSelected(interval) }
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -214,7 +216,8 @@ private fun SyncIntervalSetting(
                 )
                 Text(
                     text = labels[index],
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
         }

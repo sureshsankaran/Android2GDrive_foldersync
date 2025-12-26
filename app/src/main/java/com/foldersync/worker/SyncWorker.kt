@@ -77,8 +77,14 @@ class SyncWorker @AssistedInject constructor(
 
         android.util.Log.d("SyncWorker", "Starting sync: localUri=$effectiveLocalUri, driveId=$effectiveDriveId")
 
-        // Set foreground for long-running work with notification
-        setForeground(createForegroundInfo())
+        // Try to set foreground for long-running work with notification
+        // This can fail on Android 12+ when started from background, so we catch the exception
+        try {
+            setForeground(createForegroundInfo())
+        } catch (e: Exception) {
+            android.util.Log.w("SyncWorker", "Could not start foreground service (background start): ${e.message}")
+            // Continue without foreground - sync will still work
+        }
 
         return try {
             // Execute sync and get result
@@ -127,7 +133,7 @@ class SyncWorker @AssistedInject constructor(
                 if (requiresWifi) NetworkType.UNMETERED else NetworkType.CONNECTED
             )
             .setRequiresCharging(requiresCharging)
-            .setRequiresBatteryNotLow(true)
+            // No battery constraint for debug mode - be aggressive
             .build()
         
         val nextSyncRequest = OneTimeWorkRequestBuilder<SyncWorker>()

@@ -3,7 +3,7 @@ package com.foldersync.util
 object Constants {
     // Sync settings
     const val DEFAULT_SYNC_INTERVAL_MINUTES = 15
-    const val MIN_SYNC_INTERVAL_MINUTES = 5
+    const val MIN_SYNC_INTERVAL_MINUTES = 1  // Debug: allow 1 min for testing
     const val MAX_SYNC_INTERVAL_MINUTES = 1440 // 24 hours
 
     // File size limits

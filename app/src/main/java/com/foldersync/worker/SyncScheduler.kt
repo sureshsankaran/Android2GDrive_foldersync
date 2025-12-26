@@ -51,7 +51,7 @@ class SyncScheduler @Inject constructor(
                 if (requiresWifi) NetworkType.UNMETERED else NetworkType.CONNECTED
             )
             .setRequiresCharging(requiresCharging)
-            .setRequiresBatteryNotLow(true)
+            // Removed setRequiresBatteryNotLow for debug intervals
             .build()
 
         val inputData = Data.Builder()
