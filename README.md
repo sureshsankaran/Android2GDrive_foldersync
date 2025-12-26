@@ -9,6 +9,40 @@ A modern Android application for bidirectional synchronization between local dev
 
 ---
 
+## 🎯 Use Case: Obsidian Vault Cloud Sync
+
+**Perfect for syncing your [Obsidian](https://obsidian.md/) vault between devices using Google Drive!**
+
+Obsidian stores notes as local Markdown files, but lacks built-in cloud sync on Android. FolderSync bridges this gap:
+
+```
+📱 Phone (Obsidian Vault)     ☁️ Google Drive      💻 Desktop (Obsidian Vault)
+       /Obsidian/MyVault  ←→  /Obsidian/MyVault  ←→  ~/Documents/Obsidian/MyVault
+```
+
+### How It Works:
+1. **On your phone**: Point FolderSync to your local Obsidian vault folder
+2. **On Google Drive**: Select or create a folder for your vault
+3. **Enable background sync**: Your notes sync automatically every 15 minutes
+4. **On desktop**: Use Google Drive desktop app or Obsidian Git plugin to sync
+
+### Why FolderSync for Obsidian?
+- ✅ **Free** - No Obsidian Sync subscription needed ($96/year saved!)
+- ✅ **Works offline** - Edit notes without internet, sync when connected
+- ✅ **Conflict detection** - Never lose edits when the same note is changed on multiple devices
+- ✅ **Markdown files stay local** - Full control over your data
+- ✅ **Background sync** - Set it and forget it
+
+### Setup for Obsidian:
+1. Create your Obsidian vault in a folder like `/storage/emulated/0/Obsidian/MyVault`
+2. In FolderSync, add a sync pair:
+   - **Local Folder**: Your Obsidian vault folder
+   - **Drive Folder**: Create `/Obsidian/MyVault` on Drive
+3. Enable **Background Sync** with 15-minute interval
+4. On desktop, sync the same Drive folder to your computer
+
+---
+
 ## Table of Contents
 
 - [Features](#features)
