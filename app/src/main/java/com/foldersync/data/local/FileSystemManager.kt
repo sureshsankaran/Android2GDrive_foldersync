@@ -122,11 +122,8 @@ class FileSystemManager @Inject constructor(
         } else {
             documentFile.type ?: "application/octet-stream"
         }
-        val checksum = if (isDirectory) {
-            null
-        } else {
-            checksumCalculator.calculateMD5(documentFile.uri)
-        }
+        // Don't calculate checksum during scan - it's expensive for large files
+        // and can cause crashes/OOM. Checksum is calculated on-demand when needed.
         return LocalFile(
             uri = documentFile.uri,
             name = documentFile.name.orEmpty(),
@@ -136,7 +133,7 @@ class FileSystemManager @Inject constructor(
             mimeType = mimeType,
             isDirectory = isDirectory,
             lastModified = documentFile.lastModified(),
-            checksum = checksum
+            checksum = null  // Lazy - calculated when needed for comparison
         )
     }
     

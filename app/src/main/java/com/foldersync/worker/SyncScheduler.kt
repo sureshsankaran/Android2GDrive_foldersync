@@ -29,17 +29,17 @@ class SyncScheduler @Inject constructor(
 ) {
 
     companion object {
-        private const val DEFAULT_SYNC_INTERVAL_HOURS = 1L
+        private const val DEFAULT_SYNC_INTERVAL_MINUTES = 60L
         private const val MIN_SYNC_INTERVAL_MINUTES = 15L
     }
 
     /**
-     * Schedule periodic sync
+     * Schedule periodic sync with interval in MINUTES
      */
     fun schedulePeriodicSync(
         localFolderUri: String,
         driveFolderId: String,
-        intervalHours: Long = DEFAULT_SYNC_INTERVAL_HOURS,
+        intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES,
         requiresWifi: Boolean = false,
         requiresCharging: Boolean = false,
         conflictStrategy: ConflictResolutionStrategy = ConflictResolutionStrategy.KEEP_REMOTE
@@ -59,9 +59,13 @@ class SyncScheduler @Inject constructor(
             .putBoolean(SyncWorker.KEY_IS_MANUAL, false)
             .build()
 
+        // WorkManager minimum is 15 minutes
+        val effectiveInterval = intervalMinutes.coerceAtLeast(MIN_SYNC_INTERVAL_MINUTES)
+        android.util.Log.d("SyncScheduler", "Scheduling periodic sync every $effectiveInterval minutes")
+        
         val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
-            intervalHours.coerceAtLeast(1), TimeUnit.HOURS,
-            MIN_SYNC_INTERVAL_MINUTES, TimeUnit.MINUTES // Flex interval
+            effectiveInterval, TimeUnit.MINUTES,
+            5, TimeUnit.MINUTES // Flex interval of 5 minutes
         )
             .setConstraints(constraints)
             .setInputData(inputData)

@@ -46,14 +46,14 @@ class BootReceiver : BroadcastReceiver() {
         if (isAutoSyncEnabled) {
             val localFolderUri = preferencesManager.getLocalFolderUriString().first() ?: return
             val driveFolderId = preferencesManager.getDriveFolderIdString().first() ?: return
-            val syncIntervalHours = preferencesManager.getSyncInterval().first()
-            val requiresWifi = preferencesManager.isSyncOnWifiOnly().first()
-            val requiresCharging = preferencesManager.isSyncWhileCharging().first()
+            val syncIntervalMinutes = preferencesManager.syncIntervalMinutes.first()
+            val requiresWifi = preferencesManager.wifiOnly.first()
+            val requiresCharging = preferencesManager.chargingOnly.first()
 
             syncScheduler.schedulePeriodicSync(
                 localFolderUri = localFolderUri,
                 driveFolderId = driveFolderId,
-                intervalHours = syncIntervalHours.toLong(),
+                intervalMinutes = syncIntervalMinutes.toLong(),
                 requiresWifi = requiresWifi,
                 requiresCharging = requiresCharging
             )

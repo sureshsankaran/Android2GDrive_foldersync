@@ -111,7 +111,7 @@ class SettingsViewModel @Inject constructor(
         syncScheduler.schedulePeriodicSync(
             localFolderUri = localUri,
             driveFolderId = driveId,
-            intervalHours = (interval / 60).toLong().coerceAtLeast(1),
+            intervalMinutes = interval.toLong(),
             requiresWifi = wifi,
             requiresCharging = charging
         )

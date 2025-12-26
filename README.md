@@ -249,34 +249,34 @@ Facade for all Google Drive operations:
 
 Using **Hilt** for dependency injection with the following modules:
 
-| Module | Provides |
-|--------|----------|
-| `AppModule` | Application context, dispatchers, DataStore |
-| `AuthModule` | GoogleSignInClient, TokenRefreshManager |
-| `DatabaseModule` | Room database, DAOs |
-| `NetworkModule` | OkHttpClient, Retrofit, DriveApiService |
-| `RepositoryModule` | SyncRepository |
-| `WorkerModule` | WorkManager configuration |
+| Module             | Provides                                    |
+| ------------------ | ------------------------------------------- |
+| `AppModule`        | Application context, dispatchers, DataStore |
+| `AuthModule`       | GoogleSignInClient, TokenRefreshManager     |
+| `DatabaseModule`   | Room database, DAOs                         |
+| `NetworkModule`    | OkHttpClient, Retrofit, DriveApiService     |
+| `RepositoryModule` | SyncRepository                              |
+| `WorkerModule`     | WorkManager configuration                   |
 
 ---
 
 ## Technical Stack
 
-| Category | Technology |
-|----------|------------|
-| **Language** | Kotlin 1.9 |
-| **Min SDK** | Android 8.0 (API 26) |
-| **Target SDK** | Android 14 (API 34) |
+| Category         | Technology                      |
+| ---------------- | ------------------------------- |
+| **Language**     | Kotlin 1.9                      |
+| **Min SDK**      | Android 8.0 (API 26)            |
+| **Target SDK**   | Android 14 (API 34)             |
 | **UI Framework** | Jetpack Compose with Material 3 |
-| **Architecture** | MVVM + Clean Architecture |
-| **DI** | Hilt (Dagger) |
-| **Database** | Room |
-| **Networking** | Retrofit + OkHttp |
-| **Background** | WorkManager |
-| **Auth** | Google Sign-In (Play Services) |
-| **Storage** | Storage Access Framework (SAF) |
-| **Preferences** | DataStore |
-| **Async** | Kotlin Coroutines + Flow |
+| **Architecture** | MVVM + Clean Architecture       |
+| **DI**           | Hilt (Dagger)                   |
+| **Database**     | Room                            |
+| **Networking**   | Retrofit + OkHttp               |
+| **Background**   | WorkManager                     |
+| **Auth**         | Google Sign-In (Play Services)  |
+| **Storage**      | Storage Access Framework (SAF)  |
+| **Preferences**  | DataStore                       |
+| **Async**        | Kotlin Coroutines + Flow        |
 
 ---
 
@@ -374,11 +374,11 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
 
 **Build Variants:**
 
-| Command | Description |
-|---------|-------------|
-| `./gradlew assembleDebug` | Debug build with debugging enabled |
+| Command                     | Description                             |
+| --------------------------- | --------------------------------------- |
+| `./gradlew assembleDebug`   | Debug build with debugging enabled      |
 | `./gradlew assembleRelease` | Release build (requires signing config) |
-| `./gradlew bundleRelease` | Android App Bundle for Play Store |
+| `./gradlew bundleRelease`   | Android App Bundle for Play Store       |
 
 ---
 
@@ -479,15 +479,15 @@ When the same file is modified on both local and Drive:
 
 ### Settings
 
-| Setting | Description |
-|---------|-------------|
-| **Background Sync** | Enable/disable periodic sync |
-| **Sync Interval** | How often to sync (15min - 24hr) |
-| **WiFi Only** | Only sync on WiFi networks |
-| **Delete Handling** | How to handle deleted files |
-| **Conflict Strategy** | Default conflict resolution |
-| **Sign Out** | Disconnect Google account |
-| **Clear Sync History** | Reset sync tracking database |
+| Setting                | Description                      |
+| ---------------------- | -------------------------------- |
+| **Background Sync**    | Enable/disable periodic sync     |
+| **Sync Interval**      | How often to sync (15min - 24hr) |
+| **WiFi Only**          | Only sync on WiFi networks       |
+| **Delete Handling**    | How to handle deleted files      |
+| **Conflict Strategy**  | Default conflict resolution      |
+| **Sign Out**           | Disconnect Google account        |
+| **Clear Sync History** | Reset sync tracking database     |
 
 ---
 
@@ -497,13 +497,13 @@ When the same file is modified on both local and Drive:
 
 Each tracked file can be in one of these states:
 
-| State | Description |
-|-------|-------------|
-| `SYNCED` | File is synchronized, no changes |
-| `PENDING_UPLOAD` | Local change needs upload |
-| `PENDING_DOWNLOAD` | Drive change needs download |
-| `ERROR` | Sync failed, will retry |
-| `CONFLICT` | Both sides changed, needs resolution |
+| State              | Description                          |
+| ------------------ | ------------------------------------ |
+| `SYNCED`           | File is synchronized, no changes     |
+| `PENDING_UPLOAD`   | Local change needs upload            |
+| `PENDING_DOWNLOAD` | Drive change needs download          |
+| `ERROR`            | Sync failed, will retry              |
+| `CONFLICT`         | Both sides changed, needs resolution |
 
 ### File Comparison
 
@@ -516,26 +516,26 @@ The sync engine compares files using:
 
 **Decision Matrix:**
 
-| Local | Drive | Database | Action |
-|-------|-------|----------|--------|
-| New | - | - | Upload |
-| - | New | - | Download |
-| Modified | Same | Synced | Upload |
-| Same | Modified | Synced | Download |
-| Modified | Modified | Synced | Conflict |
-| Deleted | Exists | Synced | Delete from Drive |
-| Exists | Deleted | Synced | Delete local |
+| Local    | Drive    | Database | Action            |
+| -------- | -------- | -------- | ----------------- |
+| New      | -        | -        | Upload            |
+| -        | New      | -        | Download          |
+| Modified | Same     | Synced   | Upload            |
+| Same     | Modified | Synced   | Download          |
+| Modified | Modified | Synced   | Conflict          |
+| Deleted  | Exists   | Synced   | Delete from Drive |
+| Exists   | Deleted  | Synced   | Delete local      |
 
 ### Google Docs Handling
 
 Google Docs/Sheets/Slides files cannot be downloaded directly. They are automatically exported:
 
-| Google Type | Export Format | Extension |
-|-------------|--------------|-----------|
-| Google Docs | Office Word | `.docx` |
-| Google Sheets | Office Excel | `.xlsx` |
-| Google Slides | Office PowerPoint | `.pptx` |
-| Google Drawings | PNG Image | `.png` |
+| Google Type     | Export Format     | Extension |
+| --------------- | ----------------- | --------- |
+| Google Docs     | Office Word       | `.docx`   |
+| Google Sheets   | Office Excel      | `.xlsx`   |
+| Google Slides   | Office PowerPoint | `.pptx`   |
+| Google Drawings | PNG Image         | `.png`    |
 
 ---
 
