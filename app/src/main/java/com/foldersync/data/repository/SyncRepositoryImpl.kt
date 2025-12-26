@@ -22,6 +22,10 @@ class SyncRepositoryImpl @Inject constructor(
         return syncFileDao.getAllFiles()
     }
 
+    override suspend fun getAllTrackedFiles(): List<SyncFileEntity> {
+        return syncFileDao.getAllTrackedFiles()
+    }
+
     override suspend fun getFileByLocalPath(localPath: String): SyncFileEntity? {
         return syncFileDao.getByLocalPath(localPath)
     }

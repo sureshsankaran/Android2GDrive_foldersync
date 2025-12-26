@@ -72,6 +72,8 @@ class SyncEngine @Inject constructor(
             
             // 1. Scan local folder
             val localFiles = scanLocalFolder(localFolderUri)
+            android.util.Log.d("SyncEngine", "Local files found: ${localFiles.size}")
+            localFiles.forEach { android.util.Log.d("SyncEngine", "  Local: ${it.relativePath} (isDir=${it.isDirectory})") }
             if (isCancelled) return cancelledResult()
             
             updateProgress(
@@ -82,6 +84,8 @@ class SyncEngine @Inject constructor(
             
             // 2. List Drive folder
             val driveFiles = listDriveFolder(driveFolderId)
+            android.util.Log.d("SyncEngine", "Drive files found: ${driveFiles.size}")
+            driveFiles.forEach { android.util.Log.d("SyncEngine", "  Drive: ${it.relativePath} (isFolder=${it.isFolder})") }
             if (isCancelled) return cancelledResult()
             
             updateProgress(
@@ -95,6 +99,9 @@ class SyncEngine @Inject constructor(
             
             // 4. Diff files
             val diffResult = fileDiffer.diff(localFiles, driveFiles, lastSyncTime)
+            android.util.Log.d("SyncEngine", "Diff result: newLocal=${diffResult.newLocal.size}, newRemote=${diffResult.newRemote.size}, modLocal=${diffResult.modifiedLocal.size}, modRemote=${diffResult.modifiedRemote.size}, unchanged=${diffResult.unchanged.size}")
+            android.util.Log.d("SyncEngine", "Folder diff: newLocalFolders=${diffResult.newLocalFolders.size}, newRemoteFolders=${diffResult.newRemoteFolders.size}")
+            diffResult.newRemote.forEach { android.util.Log.d("SyncEngine", "  newRemote: ${it.relativePath}") }
             if (isCancelled) return cancelledResult()
             
             updateProgress(
@@ -108,7 +115,37 @@ class SyncEngine @Inject constructor(
             var uploadedCount = 0
             var downloadedCount = 0
             var deletedCount = 0
+            var foldersCreated = 0
             val conflicts = mutableListOf<ConflictInfo>()
+            
+            // First, create new folders on Drive (from local folders)
+            // Sort by path length to create parent folders first
+            for (folder in diffResult.newLocalFolders.sortedBy { it.relativePath.count { c -> c == '/' } }) {
+                if (isCancelled) return cancelledResult()
+                try {
+                    val pathParts = folder.relativePath.split("/")
+                    driveFileManager.findOrCreateFolderPath(driveFolderId, pathParts)
+                    foldersCreated++
+                    android.util.Log.d("SyncEngine", "Created folder on Drive: ${folder.relativePath}")
+                } catch (e: Exception) {
+                    android.util.Log.e("SyncEngine", "Failed to create folder on Drive: ${folder.relativePath}", e)
+                    errors.add(createError(folder.path, folder.name, e))
+                }
+            }
+            
+            // Create new local folders (from Drive folders)
+            // Sort by path length to create parent folders first
+            for (folder in diffResult.newRemoteFolders.sortedBy { it.relativePath.count { c -> c == '/' } }) {
+                if (isCancelled) return cancelledResult()
+                try {
+                    fileSystemManager.findOrCreatePath(localFolderUri, folder.relativePath)
+                    foldersCreated++
+                    android.util.Log.d("SyncEngine", "Created local folder: ${folder.relativePath}")
+                } catch (e: Exception) {
+                    android.util.Log.e("SyncEngine", "Failed to create local folder: ${folder.relativePath}", e)
+                    errors.add(createError(folder.relativePath, folder.name, e))
+                }
+            }
             
             // Upload new local files
             for (file in diffResult.newLocal) {
@@ -196,6 +233,66 @@ class SyncEngine @Inject constructor(
                     } catch (e: Exception) {
                         errors.add(createError(local.path, local.name, e))
                     }
+                }
+            }
+            
+            // Delete local files that were deleted on Drive
+            for (localFile in diffResult.deletedRemote) {
+                if (isCancelled) return cancelledResult()
+                try {
+                    android.util.Log.d("SyncEngine", "Deleting local file (deleted on Drive): ${localFile.relativePath}")
+                    fileSystemManager.deleteFile(localFile.uri)
+                    deletedCount++
+                    updateProgress(processedFiles = uploadedCount + downloadedCount + deletedCount)
+                    logAction(SyncAction.DELETE_LOCAL, localFile.path, localFile.name, true)
+                } catch (e: Exception) {
+                    android.util.Log.e("SyncEngine", "Failed to delete local file: ${localFile.relativePath}", e)
+                    errors.add(createError(localFile.path, localFile.name, e))
+                }
+            }
+            
+            // Delete Drive files that were deleted locally
+            for (driveFile in diffResult.deletedLocal) {
+                if (isCancelled) return cancelledResult()
+                try {
+                    android.util.Log.d("SyncEngine", "Deleting Drive file (deleted locally): ${driveFile.relativePath}")
+                    driveFileManager.deleteFile(driveFile.id, trashInstead = true) // Move to trash for safety
+                    deletedCount++
+                    updateProgress(processedFiles = uploadedCount + downloadedCount + deletedCount)
+                    logAction(SyncAction.DELETE_DRIVE, driveFile.relativePath, driveFile.name, true)
+                } catch (e: Exception) {
+                    android.util.Log.e("SyncEngine", "Failed to delete Drive file: ${driveFile.relativePath}", e)
+                    errors.add(createError(driveFile.relativePath, driveFile.name, e))
+                }
+            }
+            
+            // Delete local folders that were deleted on Drive
+            // Sort by path length descending to delete children first
+            for (localFolder in diffResult.deletedRemoteFolders.sortedByDescending { it.relativePath.count { c -> c == '/' } }) {
+                if (isCancelled) return cancelledResult()
+                try {
+                    android.util.Log.d("SyncEngine", "Deleting local folder (deleted on Drive): ${localFolder.relativePath}")
+                    fileSystemManager.deleteFile(localFolder.uri)
+                    deletedCount++
+                    logAction(SyncAction.DELETE_LOCAL, localFolder.path, localFolder.name, true)
+                } catch (e: Exception) {
+                    android.util.Log.e("SyncEngine", "Failed to delete local folder: ${localFolder.relativePath}", e)
+                    errors.add(createError(localFolder.path, localFolder.name, e))
+                }
+            }
+            
+            // Delete Drive folders that were deleted locally
+            // Sort by path length descending to delete children first
+            for (driveFolder in diffResult.deletedLocalFolders.sortedByDescending { it.relativePath.count { c -> c == '/' } }) {
+                if (isCancelled) return cancelledResult()
+                try {
+                    android.util.Log.d("SyncEngine", "Deleting Drive folder (deleted locally): ${driveFolder.relativePath}")
+                    driveFileManager.deleteFile(driveFolder.id, trashInstead = true) // Move to trash for safety
+                    deletedCount++
+                    logAction(SyncAction.DELETE_DRIVE, driveFolder.relativePath, driveFolder.name, true)
+                } catch (e: Exception) {
+                    android.util.Log.e("SyncEngine", "Failed to delete Drive folder: ${driveFolder.relativePath}", e)
+                    errors.add(createError(driveFolder.relativePath, driveFolder.name, e))
                 }
             }
             
@@ -295,13 +392,14 @@ class SyncEngine @Inject constructor(
     }
     
     private suspend fun downloadFile(driveFile: DriveFile, localFolderUri: Uri) = withContext(ioDispatcher) {
-        // Parse relative path to get parent folder parts
+        // Parse relative path to get parent folder path
         val pathParts = driveFile.relativePath.split("/")
-        val folderParts = pathParts.dropLast(1) // All parts except the filename
+        val folderPath = pathParts.dropLast(1).joinToString("/") // All parts except the filename
 
         // Create local folder structure if needed
-        val targetFolderUri = if (folderParts.isNotEmpty()) {
-            fileSystemManager.findOrCreatePath(localFolderUri, folderParts)
+        val targetFolderUri = if (folderPath.isNotEmpty()) {
+            fileSystemManager.findOrCreatePath(localFolderUri, folderPath)
+                ?: throw IOException("Failed to create folder structure: $folderPath")
         } else {
             localFolderUri
         }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 interface SyncRepository {
     // File operations
     fun getAllFiles(): Flow<List<SyncFileEntity>>
+    suspend fun getAllTrackedFiles(): List<SyncFileEntity>
     suspend fun getFileByLocalPath(localPath: String): SyncFileEntity?
     suspend fun getFileByDriveId(driveFileId: String): SyncFileEntity?
     suspend fun saveFile(file: SyncFileEntity)

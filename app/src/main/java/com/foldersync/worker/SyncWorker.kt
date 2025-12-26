@@ -10,7 +10,7 @@ import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.foldersync.data.local.PreferencesManager
-import com.foldersync.domain.sync.SyncEngine
+import com.foldersync.domain.sync.SyncEngineV2
 import com.foldersync.domain.sync.SyncState
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.first
 class SyncWorker @AssistedInject constructor(
     @Assisted private val context: Context,
     @Assisted workerParams: WorkerParameters,
-    private val syncEngine: SyncEngine,
+    private val syncEngine: SyncEngineV2,
     private val preferencesManager: PreferencesManager,
     private val notificationHelper: NotificationHelper
 ) : CoroutineWorker(context, workerParams) {

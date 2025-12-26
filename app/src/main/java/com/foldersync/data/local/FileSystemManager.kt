@@ -105,6 +105,13 @@ class FileSystemManager @Inject constructor(
         val parent = DocumentFile.fromTreeUri(context, parentUri)
             ?: DocumentFile.fromSingleUri(context, parentUri)
             ?: return null
+        
+        // Check if file already exists - return existing file URI to overwrite
+        val existingFile = parent.listFiles().find { it.name == fileName && !it.isDirectory }
+        if (existingFile != null) {
+            return existingFile.uri
+        }
+        
         return parent.createFile(mimeType, fileName)?.uri
     }
 
@@ -146,9 +153,32 @@ class FileSystemManager @Inject constructor(
         var current = DocumentFile.fromTreeUri(context, rootUri) ?: return null
         val parts = relativePath.split("/").filter { it.isNotEmpty() }
         
-        for (part in parts.dropLast(1)) { // Navigate/create folders, exclude the file name
+        // Create all folders in the path
+        for (part in parts) {
             val existing = current.listFiles().find { it.name == part && it.isDirectory }
             current = existing ?: (current.createDirectory(part) ?: return null)
+        }
+        
+        return current.uri
+    }
+
+    /**
+     * Find a file or folder at the given relative path from root.
+     * Returns null if not found.
+     */
+    fun findFile(rootUri: Uri, relativePath: String): Uri? {
+        if (relativePath.isEmpty()) return rootUri
+        
+        var current: DocumentFile = DocumentFile.fromTreeUri(context, rootUri) ?: return null
+        val parts = relativePath.split("/").filter { it.isNotEmpty() }
+        
+        for ((index, part) in parts.withIndex()) {
+            val isLast = index == parts.lastIndex
+            val child = current.listFiles().find { it.name == part }
+            if (child == null) {
+                return null
+            }
+            current = child
         }
         
         return current.uri

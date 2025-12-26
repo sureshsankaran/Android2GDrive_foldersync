@@ -26,15 +26,20 @@ class TokenRefreshManager @Inject constructor(
 ) {
 
     private val mutex = Mutex()
+    
+    // Cache the last known good account to avoid repeated silentSignIn calls
+    private var cachedAccount: GoogleSignInAccount? = null
 
     suspend fun getValidAccessToken(forceRefresh: Boolean = false): String? = mutex.withLock {
         val currentTokens = secureTokenManager.getTokens()
-        val needsRefresh = forceRefresh || currentTokens.isExpired() || currentTokens.accessToken.isNullOrBlank()
-
-        if (!needsRefresh) {
+        
+        // If token is still valid and no force refresh, return it
+        if (!forceRefresh && !currentTokens.isExpired() && !currentTokens.accessToken.isNullOrBlank()) {
+            android.util.Log.d("TokenRefreshManager", "Token still valid, using cached")
             return currentTokens.accessToken
         }
 
+        android.util.Log.d("TokenRefreshManager", "Token expired or force refresh, refreshing...")
         val refreshed = refreshTokenInternal()
         return refreshed?.accessToken
     }
@@ -44,10 +49,14 @@ class TokenRefreshManager @Inject constructor(
     }
 
     suspend fun clearTokens() = mutex.withLock {
+        cachedAccount = null
         secureTokenManager.clear()
     }
 
     suspend fun persistTokensFromAccount(account: GoogleSignInAccount): AuthTokens? = mutex.withLock {
+        // Cache the account for future token refreshes
+        cachedAccount = account
+        
         val accessToken = fetchAccessToken(account.account) ?: return@withLock null
         if (accessToken.isBlank()) return@withLock null
         val tokens = AuthTokens(
@@ -61,11 +70,33 @@ class TokenRefreshManager @Inject constructor(
     }
 
     private suspend fun refreshTokenInternal(): AuthTokens? {
-        val account = signInHelper.silentSignIn() ?: return null
-        val accessToken = fetchAccessToken(account.account)
-        if (accessToken.isNullOrBlank()) {
+        // Try cached account first, then silentSignIn, then check last signed in account
+        var account = cachedAccount
+        
+        if (account == null) {
+            android.util.Log.d("TokenRefreshManager", "No cached account, trying silentSignIn")
+            account = signInHelper.silentSignIn()
+        }
+        
+        if (account == null) {
+            android.util.Log.d("TokenRefreshManager", "silentSignIn failed, checking last signed in account")
+            account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
+        }
+        
+        if (account == null) {
+            android.util.Log.w("TokenRefreshManager", "No account available for token refresh")
             return null
         }
+        
+        // Cache for future use
+        cachedAccount = account
+        
+        val accessToken = fetchAccessToken(account.account)
+        if (accessToken.isNullOrBlank()) {
+            android.util.Log.w("TokenRefreshManager", "Failed to fetch access token")
+            return null
+        }
+        
         val expiresAt = System.currentTimeMillis() +
             TimeUnit.MINUTES.toMillis(AuthConfig.TOKEN_FALLBACK_LIFETIME_MINUTES)
 
@@ -75,18 +106,30 @@ class TokenRefreshManager @Inject constructor(
             expiresAtEpochMillis = expiresAt
         )
         secureTokenManager.saveTokens(tokens)
+        android.util.Log.d("TokenRefreshManager", "Token refreshed successfully, expires in ${AuthConfig.TOKEN_FALLBACK_LIFETIME_MINUTES} min")
         return tokens
     }
 
     private suspend fun fetchAccessToken(account: Account?): String? = withContext(Dispatchers.IO) {
         if (account == null) return@withContext null
         try {
+            // Clear any cached token to force a fresh one from Google
+            val currentToken = secureTokenManager.getAccessToken()
+            if (currentToken != null) {
+                GoogleAuthUtil.clearToken(context, currentToken)
+            }
             GoogleAuthUtil.getToken(context, account, AuthConfig.scopeString)
         } catch (recoverable: UserRecoverableAuthException) {
+            // User needs to re-consent - clear cached tokens so they can sign in again
+            android.util.Log.w("TokenRefreshManager", "UserRecoverableAuthException - need consent", recoverable)
+            cachedAccount = null
+            secureTokenManager.clear()
             null
-        } catch (_: GoogleAuthException) {
+        } catch (e: GoogleAuthException) {
+            android.util.Log.e("TokenRefreshManager", "GoogleAuthException", e)
             null
-        } catch (_: IOException) {
+        } catch (e: IOException) {
+            android.util.Log.e("TokenRefreshManager", "IOException getting token", e)
             null
         }
     }

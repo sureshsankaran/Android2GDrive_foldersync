@@ -25,6 +25,7 @@ class ResolveConflictUseCase @Inject constructor(
             uri = android.net.Uri.parse(conflict.localPath),
             name = conflict.fileName,
             path = conflict.localPath,
+            relativePath = conflict.fileName, // Use filename as relativePath for conflict resolution
             size = conflict.localSize,
             mimeType = "application/octet-stream",
             isDirectory = false,
@@ -39,7 +40,8 @@ class ResolveConflictUseCase @Inject constructor(
             size = conflict.driveSize,
             md5Checksum = conflict.driveChecksum,
             parents = null,
-            version = null
+            version = null,
+            relativePath = conflict.fileName // Use filename as relativePath for conflict resolution
         )
         return conflictResolver.resolve(localFile, driveFile, strategy)
     }

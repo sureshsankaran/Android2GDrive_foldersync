@@ -16,6 +16,9 @@ interface SyncFileDao {
     @Query("SELECT * FROM sync_files ORDER BY fileName ASC")
     fun getAllFiles(): Flow<List<SyncFileEntity>>
 
+    @Query("SELECT * FROM sync_files ORDER BY fileName ASC")
+    suspend fun getAllTrackedFiles(): List<SyncFileEntity>
+
     @Query("SELECT * FROM sync_files WHERE localPath = :localPath")
     suspend fun getByLocalPath(localPath: String): SyncFileEntity?
 
