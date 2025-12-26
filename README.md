@@ -87,10 +87,13 @@ Obsidian stores notes as local Markdown files, but lacks built-in cloud sync on 
 - ⚡ **Resumable Uploads/Downloads**: Large file transfers can resume after interruption
 - 🔍 **Smart Conflict Detection**: Detects and handles conflicting changes on both sides
 - 📄 **Google Docs Export**: Automatically exports Google Docs/Sheets/Slides to Office formats
-- 🔄 **Background Sync**: Configurable periodic sync using WorkManager
+- 🔄 **Background Sync**: Configurable periodic sync using WorkManager (1 min - 24 hours)
 - 💾 **Database-Tracked State**: Accurate create/update/delete detection using Room database
 - 🎨 **Material 3 UI**: Modern, clean interface with Jetpack Compose
 - 🚦 **Rate Limiting**: Built-in exponential backoff for API rate limits
+- 📱 **Auto-Resume on App Start**: Sync schedule automatically restores when app launches
+- 🔋 **Battery-Friendly**: Smart constraints for background sync (WiFi-only, charging-only options)
+- 🔄 **Update vs Create**: Intelligently updates existing files instead of creating duplicates
 
 ---
 
@@ -455,13 +458,23 @@ Enable automatic periodic sync:
 2. Toggle **"Enable Background Sync"**
 
 3. Configure **sync interval**:
-   - 15 minutes (minimum)
+   - 1 minute (debug/testing)
+   - 5 minutes (debug/testing)
+   - 15 minutes
    - 30 minutes
    - 1 hour
+   - 2 hours
    - 6 hours
+   - 12 hours
    - 24 hours
 
-4. Optional: **"WiFi Only"** - sync only on WiFi networks
+4. Optional constraints:
+   - **"WiFi Only"** - sync only on WiFi networks
+   - **"Charging Only"** - sync only when device is charging
+
+> **Note**: Intervals under 15 minutes use a special debug mode with chained one-time work requests instead of periodic work, as WorkManager has a 15-minute minimum for periodic tasks.
+
+> **Note**: The sync schedule is automatically restored when the app starts, so you don't need to reconfigure after a device restart or app update.
 
 ### Conflict Resolution
 
@@ -479,15 +492,29 @@ When the same file is modified on both local and Drive:
 
 ### Settings
 
-| Setting                | Description                      |
-| ---------------------- | -------------------------------- |
-| **Background Sync**    | Enable/disable periodic sync     |
-| **Sync Interval**      | How often to sync (15min - 24hr) |
-| **WiFi Only**          | Only sync on WiFi networks       |
-| **Delete Handling**    | How to handle deleted files      |
-| **Conflict Strategy**  | Default conflict resolution      |
-| **Sign Out**           | Disconnect Google account        |
-| **Clear Sync History** | Reset sync tracking database     |
+| Setting                | Description                              |
+| ---------------------- | ---------------------------------------- |
+| **Background Sync**    | Enable/disable periodic sync             |
+| **Sync Interval**      | How often to sync (1min - 24hr)          |
+| **WiFi Only**          | Only sync on WiFi networks               |
+| **Charging Only**      | Only sync when device is charging        |
+| **Conflict Strategy**  | Default conflict resolution              |
+| **Sign Out**           | Disconnect Google account                |
+| **Clear Sync History** | Reset sync tracking database             |
+
+---
+
+## Known Limitations
+
+### Android Background Restrictions
+
+- **Android 12+ (API 31+)**: Background foreground service restrictions may cause sync to run without a notification when app is in background. Sync still works but won't show progress notification.
+
+- **Samsung Devices**: Aggressive battery optimization (FreecessController) may delay background syncs. For best results:
+  - Add FolderSync to battery optimization whitelist
+  - Go to Settings → Apps → FolderSync → Battery → Unrestricted
+
+- **WorkManager Minimum Interval**: Android's WorkManager has a 15-minute minimum for periodic tasks. Shorter intervals (1-5 min) use a workaround with chained one-time work requests.
 
 ---
 
@@ -622,6 +649,33 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 ./gradlew clean assembleDebug
 ```
 
+**6. PNG files downloaded as JPG**
+```
+- Fixed in latest version - MIME type is now inferred from file extension
+- Update to latest version if seeing this issue
+```
+
+**7. Duplicate files created in Google Drive**
+```
+- Fixed in latest version - existing files are now updated instead of creating new copies
+- The sync engine now uses updateFile() for existing files, uploadFile() for new files
+```
+
+**8. Background sync not triggering on Samsung**
+```
+- Samsung's aggressive battery optimization may block background work
+- Solution: Add FolderSync to battery optimization whitelist
+  Settings → Apps → FolderSync → Battery → Unrestricted
+- Or use the 1-minute debug interval which uses chained OneTimeWork
+```
+
+**9. "ForegroundServiceStartNotAllowedException" in logs**
+```
+- This is expected on Android 12+ when sync runs from background
+- The sync still works - this error is handled gracefully
+- Only the progress notification won't show
+```
+
 ### Viewing Logs
 
 ```bash
@@ -629,7 +683,10 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 adb logcat | grep -E "FolderSync|SyncEngine|DriveFileManager"
 
 # Sync operations only
-adb logcat | grep -E "SyncEngineV2|SyncDiffer"
+adb logcat | grep -E "SyncEngineV2|SyncDiffer|SyncWorker"
+
+# Background sync scheduling
+adb logcat | grep -E "SyncScheduler|SyncWorker|FolderSyncApp"
 
 # Auth issues
 adb logcat | grep -E "TokenRefresh|GoogleAuth|AuthInterceptor"
@@ -637,6 +694,23 @@ adb logcat | grep -E "TokenRefresh|GoogleAuth|AuthInterceptor"
 # Clear and watch live
 adb logcat -c && adb logcat | grep -i foldersync
 ```
+
+---
+
+## Version History
+
+### v1.0.0 (December 2025)
+- ✅ Bidirectional sync between local folders and Google Drive
+- ✅ Subfolder support with recursive sync
+- ✅ Google Docs/Sheets/Slides export to Office formats
+- ✅ Background sync with configurable intervals (1 min - 24 hours)
+- ✅ Auto-restore sync schedule on app start
+- ✅ Conflict detection and resolution
+- ✅ Database-tracked file state for accurate sync decisions
+- ✅ Update existing files (no duplicate creation)
+- ✅ Proper MIME type handling for all file types
+- ✅ Graceful handling of delete failures (404/403)
+- ✅ Samsung battery optimization workarounds
 
 ---
 
