@@ -484,6 +484,9 @@ class SyncEngineV2 @Inject constructor(
     /**
      * Convert Google Docs file names and MIME types to local equivalents.
      * Google Docs/Sheets/Slides don't have file extensions and need to be exported.
+     * 
+     * For regular files, we infer the MIME type from the filename extension to avoid
+     * Android's DocumentFile.createFile() renaming the file based on MIME type mismatch.
      */
     private fun getLocalFileNameAndMimeType(originalName: String, mimeType: String): Pair<String, String> {
         return when (mimeType) {
@@ -503,7 +506,61 @@ class SyncEngineV2 @Inject constructor(
                 val name = if (originalName.endsWith(".png")) originalName else "$originalName.png"
                 name to "image/png"
             }
-            else -> originalName to mimeType
+            else -> {
+                // For regular files, infer MIME type from file extension to avoid
+                // Android renaming the file to match the Drive-reported MIME type
+                val inferredMimeType = getMimeTypeFromExtension(originalName) ?: mimeType
+                originalName to inferredMimeType
+            }
+        }
+    }
+    
+    /**
+     * Infer MIME type from file extension to ensure Android doesn't rename files.
+     * Returns null if extension is unknown.
+     */
+    private fun getMimeTypeFromExtension(fileName: String): String? {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return when (extension) {
+            // Images
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "bmp" -> "image/bmp"
+            "svg" -> "image/svg+xml"
+            "ico" -> "image/x-icon"
+            // Documents
+            "pdf" -> "application/pdf"
+            "doc" -> "application/msword"
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "xls" -> "application/vnd.ms-excel"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "ppt" -> "application/vnd.ms-powerpoint"
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            // Text
+            "txt" -> "text/plain"
+            "html", "htm" -> "text/html"
+            "css" -> "text/css"
+            "js" -> "application/javascript"
+            "json" -> "application/json"
+            "xml" -> "application/xml"
+            "md" -> "text/markdown"
+            "csv" -> "text/csv"
+            // Media
+            "mp3" -> "audio/mpeg"
+            "mp4" -> "video/mp4"
+            "wav" -> "audio/wav"
+            "avi" -> "video/x-msvideo"
+            "mov" -> "video/quicktime"
+            // Archives
+            "zip" -> "application/zip"
+            "rar" -> "application/vnd.rar"
+            "tar" -> "application/x-tar"
+            "gz" -> "application/gzip"
+            // Other
+            "apk" -> "application/vnd.android.package-archive"
+            else -> null
         }
     }
     
