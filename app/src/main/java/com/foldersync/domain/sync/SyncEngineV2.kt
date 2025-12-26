@@ -214,11 +214,15 @@ class SyncEngineV2 @Inject constructor(
             for (file in plan.toDownload) {
                 if (isCancelled) return cancelledResult()
                 
-                // Mark as pending download before starting
+                // Get the actual local path (may have extension added for Google Docs)
+                val actualLocalPath = SyncDiffer.getLocalPathForDriveFile(file)
+                val (localFileName, _) = getLocalFileNameAndMimeType(file.name, file.mimeType)
+                
+                // Mark as pending download before starting - use actual local path
                 syncRepository.saveFile(SyncFileEntity(
-                    localPath = file.relativePath,
+                    localPath = actualLocalPath,
                     driveFileId = file.id,
-                    fileName = file.name,
+                    fileName = localFileName,
                     isDirectory = false,
                     fileSize = file.size ?: 0L,
                     localModifiedTime = 0L,
@@ -234,11 +238,11 @@ class SyncEngineV2 @Inject constructor(
                     downloadedCount++
                     updateProgress(processedFiles = uploadedCount + downloadedCount + deletedCount)
                     
-                    // Update tracking with success
+                    // Update tracking with success - use actual local path
                     syncRepository.saveFile(SyncFileEntity(
-                        localPath = file.relativePath,
+                        localPath = actualLocalPath,
                         driveFileId = file.id,
-                        fileName = file.name,
+                        fileName = localFileName,
                         isDirectory = false,
                         fileSize = file.size ?: 0L,
                         localModifiedTime = System.currentTimeMillis(),
@@ -249,14 +253,14 @@ class SyncEngineV2 @Inject constructor(
                         mimeType = file.mimeType
                     ))
                     
-                    logAction(SyncAction.DOWNLOAD, file.relativePath, file.name, true)
-                    android.util.Log.d(TAG, "Downloaded: ${file.relativePath}")
+                    logAction(SyncAction.DOWNLOAD, actualLocalPath, localFileName, true)
+                    android.util.Log.d(TAG, "Downloaded: ${file.relativePath} -> $actualLocalPath")
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "Failed to download: ${file.relativePath}", e)
-                    // Mark as error for retry next time
-                    syncRepository.updateFileStatus(file.relativePath, SyncStatus.ERROR)
-                    errors.add(createError(file.relativePath, file.name, e))
-                    logAction(SyncAction.DOWNLOAD, file.relativePath, file.name, false, e.message)
+                    // Mark as error for retry next time - use actual local path
+                    syncRepository.updateFileStatus(actualLocalPath, SyncStatus.ERROR)
+                    errors.add(createError(actualLocalPath, file.name, e))
+                    logAction(SyncAction.DOWNLOAD, actualLocalPath, file.name, false, e.message)
                 }
             }
             

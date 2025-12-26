@@ -28,8 +28,45 @@ import javax.inject.Inject
  * 
  * 4. TRACKED BUT GONE FROM BOTH:
  *    - Remove from tracking DB
+ *    
+ * GOOGLE DOCS HANDLING:
+ * Google Docs/Sheets/Slides are exported to Office formats locally:
+ * - "document.gdoc" → "document.docx"
+ * - "spreadsheet" → "spreadsheet.xlsx"
+ * - "presentation" → "presentation.pptx"
+ * We normalize paths to match Drive files with their local equivalents.
  */
 class SyncDiffer @Inject constructor() {
+    
+    companion object {
+        // Map of Google apps MIME types to their export extensions
+        private val GOOGLE_DOCS_EXTENSIONS = mapOf(
+            "application/vnd.google-apps.document" to ".docx",
+            "application/vnd.google-apps.spreadsheet" to ".xlsx",
+            "application/vnd.google-apps.presentation" to ".pptx",
+            "application/vnd.google-apps.drawing" to ".png"
+        )
+        
+        /**
+         * Get the local file path for a Drive file.
+         * For Google Docs files, this adds the appropriate extension.
+         */
+        fun getLocalPathForDriveFile(driveFile: DriveFile): String {
+            val extension = GOOGLE_DOCS_EXTENSIONS[driveFile.mimeType]
+            return if (extension != null && !driveFile.relativePath.endsWith(extension, ignoreCase = true)) {
+                driveFile.relativePath + extension
+            } else {
+                driveFile.relativePath
+            }
+        }
+        
+        /**
+         * Check if this is a Google Docs/Sheets/Slides file that needs export.
+         */
+        fun isGoogleDocsFile(mimeType: String?): Boolean {
+            return mimeType?.startsWith("application/vnd.google-apps.") == true
+        }
+    }
 
     data class SyncPlan(
         // Files/folders to upload (new or modified)
@@ -75,11 +112,19 @@ class SyncDiffer @Inject constructor() {
         trackedFiles: List<SyncFileEntity>
     ): SyncPlan {
         // Build lookup maps (by relative path, case-insensitive)
+        // Local files: keyed by their actual path
         val localMap = localFiles
             .filter { it.relativePath.isNotBlank() }
             .associateBy { it.relativePath.lowercase() }
         
+        // Drive files: keyed by their LOCAL EQUIVALENT path
+        // For Google Docs, this means "document" → "document.docx"
         val driveMap = driveFiles
+            .filter { it.relativePath.isNotBlank() }
+            .associateBy { getLocalPathForDriveFile(it).lowercase() }
+        
+        // Also keep original drive map for reverse lookup
+        val driveByOriginalPath = driveFiles
             .filter { it.relativePath.isNotBlank() }
             .associateBy { it.relativePath.lowercase() }
         
